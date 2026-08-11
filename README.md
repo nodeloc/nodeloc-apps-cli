@@ -4,7 +4,6 @@
 
 app 是一个导出若干 handler 的 JS 模块，handler 跑在论坛服务端的沙箱里。这个 CLI 负责本地那一半：登录、打包、在只有你能看见的私有安装上试跑、提交审核、看日志。
 
-配套的论坛插件：[nodeloc/discourse-apps](https://github.com/nodeloc/discourse-apps) —— 完整的作者指南（`ctx` 字段、组件表、权限对照、排错）在它的 [docs/authoring.md](https://github.com/nodeloc/discourse-apps/blob/main/docs/authoring.md)。
 
 ## 安装
 
@@ -19,7 +18,7 @@ npm install -g .
 ## 登录
 
 ```bash
-nodeloc-apps login --site https://你的论坛
+nodeloc-apps login --site https://www.nodeloc.com
 ```
 
 终端打印一个校验码和一个链接。在浏览器里打开，**核对页面上的码和终端里的一致**（不一致就直接关掉，说明这个批准请求不是你发起的），点「批准」，终端自己就拿到了凭据。
@@ -29,7 +28,7 @@ nodeloc-apps login --site https://你的论坛
 在 CI 或没有浏览器的机器上，改用环境变量（在论坛作者页点「生成 key」拿到），它们优先于存下来的凭据：
 
 ```bash
-export NODELOC_APPS_SITE=https://你的论坛
+export NODELOC_APPS_SITE=https://www.nodeloc.com
 export NODELOC_APPS_API_KEY=...
 export NODELOC_APPS_API_USERNAME=你的用户名
 ```
