@@ -1,0 +1,25 @@
+{
+  "name": "@nodeloc/apps-cli",
+  "version": "0.1.0",
+  "description": "Build and publish sandboxed NodeLoc apps",
+  "type": "module",
+  "bin": {
+    "nodeloc-apps": "./bin/nodeloc-apps.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "templates"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nodeloc/nodeloc-apps-cli.git"
+  },
+  "homepage": "https://github.com/nodeloc/nodeloc-apps-cli"
+}
