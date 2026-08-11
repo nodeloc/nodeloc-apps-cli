@@ -2,6 +2,7 @@
   "name": "@nodeloc/apps-cli",
   "version": "0.1.0",
   "description": "Build and publish sandboxed NodeLoc apps",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "nodeloc-apps": "./bin/nodeloc-apps.js"

@@ -86,3 +86,7 @@ my-game/
 ```bash
 npm test
 ```
+
+## License
+
+MIT
