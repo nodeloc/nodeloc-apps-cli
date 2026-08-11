@@ -15,7 +15,7 @@ const POLL_INTERVAL_MS = 2000;
 export async function login(args, io, { fetchImpl = fetch, sleep = wait } = {}) {
   const site = (siteFrom(args) ?? process.env.NODELOC_APPS_SITE ?? "").replace(/\/$/, "");
   if (!site) {
-    throw new ConfigError("Usage: nodeloc-apps login --site https://your.forum");
+    throw new ConfigError("Usage: nodeloc-apps login --site https://www.nodeloc.com");
   }
 
   const started = await request(fetchImpl, `${site}/apps/cli/start.json`, { method: "POST" });
