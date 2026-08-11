@@ -80,6 +80,24 @@ my-game/
 
 `placement` 值得想清楚：`single` 表示全站只应存在一处（有共享排行榜的都属于此类，因为每个安装的共享区是独立的，放两处等于把榜劈成两半）；`many` 适合投票、倒计时、骰子这类每处一份才合理的东西。
 
+## 让 AI 帮你写 app
+
+`skills/nodeloc-app/` 是一个 [Claude Code skill](https://docs.claude.com/en/docs/claude-code/skills)：把平台的规则（handler 签名、组件表和取值范围、权限对照、什么可信什么不可信）交给 agent，省掉它靠猜和反复试错。
+
+装到个人目录，对所有项目生效：
+
+```bash
+mkdir -p ~/.claude/skills && cp -r skills/nodeloc-app ~/.claude/skills/
+```
+
+或者只装进某个 app 项目：
+
+```bash
+mkdir -p my-game/.claude/skills && cp -r skills/nodeloc-app my-game/.claude/skills/
+```
+
+之后在 app 目录里直接说「加个排行榜」就行，agent 会知道分数必须由 handler 决定、共享区只有 handler 写得进去。
+
 ## 开发本 CLI
 
 ```bash
