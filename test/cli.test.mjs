@@ -6,7 +6,8 @@ import path from "node:path";
 import { bundle, inspect, BundleError } from "../src/bundle.js";
 import { createClient, ApiError } from "../src/api.js";
 import { readManifest, readCredentials, ConfigError } from "../src/config.js";
-import { init, dev } from "../src/commands.js";
+import { init, dev, playtest } from "../src/commands.js";
+import { createServer } from "node:http";
 
 const silentIo = { log() {}, warn() {} };
 
@@ -166,6 +167,58 @@ describe("commands", () => {
 
   test("init refuses a slug the server would reject", async () => {
     await assert.rejects(() => init(["Not A Slug"], silentIo), /lowercase/);
+  });
+
+  test("playtest pushes once per save and never queues a review", async () => {
+    // The bug this covers: a push used to be sent as a submission, which put a
+    // version in the review queue and then blocked every later save on the
+    // one-open-submission rule.
+    const dir = await scratch();
+    const cwd = process.cwd();
+    process.chdir(dir);
+
+    const seen = [];
+    const server = createServer((req, res) => {
+      seen.push(req.url);
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        res.setHeader("content-type", "application/json");
+        if (req.url === "/apps/authoring.json") {
+          res.end(JSON.stringify([{ id: 7, slug: "dice-roller" }]));
+        } else {
+          res.end(JSON.stringify({ install: { id: 3 }, version: { id: 9, version_number: 1 } }));
+        }
+      });
+    });
+
+    try {
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      process.env.NODELOC_APPS_SITE = `http://127.0.0.1:${server.address().port}`;
+      process.env.NODELOC_APPS_API_KEY = "k";
+      process.env.NODELOC_APPS_API_USERNAME = "u";
+
+      await init(["dice-roller"], silentIo);
+      // A watcher that ends immediately, so the command returns after one push.
+      const noWatch = async function* () {};
+      await playtest([], silentIo, path.join(dir, "dice-roller"), { watchFn: noWatch });
+
+      assert.deepEqual(
+        seen.filter((url) => url !== "/apps/authoring.json"),
+        ["/apps/authoring/apps/7/push.json"],
+        "one request, to the push endpoint"
+      );
+      assert.ok(
+        !seen.some((url) => url.endsWith("/versions.json")),
+        "nothing is submitted for review"
+      );
+    } finally {
+      server.close();
+      process.chdir(cwd);
+      delete process.env.NODELOC_APPS_SITE;
+      delete process.env.NODELOC_APPS_API_KEY;
+      delete process.env.NODELOC_APPS_API_USERNAME;
+    }
   });
 
   test("dev fails when the entry file is missing", async () => {

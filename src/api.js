@@ -63,6 +63,11 @@ export function createClient({ site, key, username }, fetchImpl = fetch) {
       request("POST", `/apps/authoring/apps/${appId}/playtest.json`, {
         version_id: versionId,
       }),
+    // One request per save. It writes a draft version and aims the author's
+    // playtest at it, which is a different thing from submitting for review —
+    // see `playtest` in commands.js.
+    pushPlaytest: (appId, version) =>
+      request("POST", `/apps/authoring/apps/${appId}/push.json`, version),
   };
 }
 

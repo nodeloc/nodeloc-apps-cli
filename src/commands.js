@@ -109,6 +109,10 @@ export async function playtest(_args, io, cwd = process.cwd(), { watchFn = watch
   const client = createClient(readCredentials(process.env, await store.load()));
   const app = await resolveApp(client, manifest, io);
 
+  // A push is not a submission. It used to be sent as one, which queued a
+  // review and notified every moderator on the site — and then the one-open-
+  // submission rule refused every save after the first, so a watch session
+  // stopped reaching the site without saying so.
   const push = async () => {
     const code = await bundle(path.join(cwd, manifest.entry));
     const { problems } = inspect(code);
@@ -117,7 +121,7 @@ export async function playtest(_args, io, cwd = process.cwd(), { watchFn = watch
       return null;
     }
 
-    const version = await client.submitVersion(app.id, {
+    const pushed = await client.pushPlaytest(app.id, {
       version: {
         bundle: code,
         requested_scopes: manifest.scopes ?? [],
@@ -125,8 +129,7 @@ export async function playtest(_args, io, cwd = process.cwd(), { watchFn = watch
         manifest: declaredFrom(manifest),
       },
     });
-    const install = await client.upsertPlaytest(app.id, version.version.id);
-    return install.install;
+    return pushed.install;
   };
 
   const install = await push();
