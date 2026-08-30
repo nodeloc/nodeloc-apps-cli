@@ -64,6 +64,33 @@ who typed it. The form shows it as already set, and leaving it alone keeps it.
 Whatever is filled in arrives as `ctx.config`. Declare nothing and `ctx.config`
 is whatever an admin put there by hand, which is the old behaviour.
 
+### Saying it in the reader's language
+
+`ctx.locale` is the forum's own language. `post.locale`, on a post you read, is
+that member's. Which to use follows from who is reading what you write:
+
+| What | Whose language |
+|---|---|
+| A post everybody in the topic reads | `ctx.locale` |
+| A reply to one person — a greeting, a reminder | `post.locale`, then `ctx.locale` |
+| A flag | `ctx.locale` — moderators read it |
+| A prompt sent to a model | neither; keep it in one language |
+
+Fall back exact, then the same language written for anywhere else, then
+English. An app that wrote `zh_CN` should not leave a `zh_TW` reader with
+English — Simplified is much closer to what they read than that.
+
+A **label in `settings` may be written per locale**, and the install form picks
+for whoever is reading it. Node owners are the audience here, and a form of
+English labels on a forum that does not speak English is a form nobody can fill
+in:
+
+```jsonc
+{ "key": "endpoint",
+  "label": { "en": "API endpoint", "zh_CN": "API 地址" },
+  "type": "url", "required": true }
+```
+
 ## Handlers
 
 All handlers are `(ctx, api)` and may be async. `render` is **required for an app with an interface** — the bundler rejects such a module without it.
