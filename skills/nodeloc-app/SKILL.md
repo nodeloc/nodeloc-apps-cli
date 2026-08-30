@@ -22,7 +22,7 @@ Read `app.json` if it exists. If starting fresh: `nodeloc-apps init <slug> --tem
   "surface": "blocks",       // blocks | webview | service
   "placement": "single",     // single | many
   "triggers": [],            // post_created | post_edited | topic_created
-                             // | post_liked | user_created
+                             // | post_liked | user_created | post_flagged
   "domains": []              // exact hostnames, each approved one at a time
 }
 ```
@@ -181,6 +181,53 @@ Two rules that decide whether a leaderboard is worth anything:
 - **A broadcast is a signal, never state.** Clients receiving `rt.publish` re-render through the permission-checked path; the broadcast payload is never used as data.
 
 `context` is implicit. `post.write` and `webview` are **privileged**: only an admin grants them, and each has a site setting that has to be on as well. In a playtest, `post.write` effects are checked in full and then thrown away — a playtest can say what it would post, but never posts.
+
+## Helping to moderate
+
+An app installed against a node joins that node's moderation group, and that
+one fact is the whole permission model: from then on core's own category-scoped
+checks decide what it may do, so it can act there exactly as far as that node's
+moderators can and nowhere else at all. A node's owner installs it themselves;
+only an admin installs anything against the whole site.
+
+| Effect | Scope | |
+|---|---|---|
+| `flag.create` | `flag.create` | Raises a flag. A person settles it. |
+| `post.delete` / `post.recover` | `moderate.post` | Privileged |
+| `topic.close` / `topic.tag` | `moderate.topic` | Privileged |
+
+```js
+{ type: "flag.create", post_id: 1902, reason: "..." }
+{ type: "post.delete", post_id: 1902 }
+{ type: "topic.close", topic_id: 481, reason: "..." }
+{ type: "topic.tag", topic_id: 481, tags: ["resolved"] }
+```
+
+**Flag first.** `flag.create` costs an ordinary scope because it ends with a
+person deciding; deleting costs a privileged one because it ends with somebody's
+post gone. An app that flags is most of the value of one that deletes, and it
+fails safe. A post is flagged once per app, however often it is looked at.
+
+`post.delete` will not take the opening post of a topic — that is closing
+somebody's whole thread through a door marked "post".
+
+### Knowing things across installs
+
+| Call | Scope |
+|---|---|
+| `api.kv.app.get(key)` | `kv.app` — what the whole app knows, everywhere it runs |
+| `api.post.recentByUser(id)` | `post.read` — that person's recent posts, within the app's reach |
+
+`kv.shared` belongs to **one install**: right for a leaderboard, useless for a
+list of judged accounts, which has to be the same in all fifty nodes an app runs
+in. `kv.app` is that list.
+
+It cannot be enumerated, and this is deliberate: on a real site the area is a
+lookup table with tens of thousands of rows, and handing it over whole on every
+post would put it in memory every time anybody writes anything. Both calls above
+answer **only for the people this invocation is about** — whoever acted, whoever
+wrote the post, whoever was reported. Key entries as `user:<id>` and they will be
+there; ask after a stranger and you get `null`, not an error.
 
 ## Webview
 
