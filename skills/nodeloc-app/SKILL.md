@@ -38,6 +38,8 @@ section below do not apply to it.
 
 `placement` is a real decision, not boilerplate. **Each install has its own separate shared area.** An app with a site-wide leaderboard must be `single`, or the board splits in half the moment someone adds it to a second post. Use `many` only when one copy per post is the point (polls, countdowns, dice, converters).
 
+**It governs nodes too.** A `single` app can be installed in one place — one post or one node — and refuses a second anywhere. A bot meant for node owners to install is almost always `many`: each node keeps its own greeting log, its own rules, its own pending reminders. Use `single` for a bot whose whole point is one shared thing, and reach for `kv.app` first, which shares across installs and makes `many` safe.
+
 ### Asking for what you need
 
 An app that needs to be told something — an endpoint, a key, a category —
