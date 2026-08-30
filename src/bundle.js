@@ -8,7 +8,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+// What a module has to export to be runnable at all, per surface. A bot has no
+// interface, so requiring `render` of one would mean shipping a function that
+// is never called; what it must have instead is at least one way in.
 const REQUIRED_EXPORTS = ["render"];
+const SERVICE_ENTRY_POINTS = ["onTrigger", "onSchedule", "onFetch"];
 
 // Both forms have to be caught: `import x from "./y.js"` and the side-effect
 // `import "./y.js"`. Missing the second would ship an import statement the
@@ -67,18 +71,36 @@ export async function bundle(entryPath, { maxBytes = 512 * 1024, seen = new Set(
  * Checks the things the server would reject anyway, but here, before an author
  * spends a review cycle finding out.
  */
-export function inspect(code) {
+export function inspect(code, manifest = {}) {
   const problems = [];
   const warnings = [];
+  const exported = (name) =>
+    new RegExp(`export\\s+(async\\s+)?function\\s+${name}\\b`).test(code);
 
-  for (const name of REQUIRED_EXPORTS) {
-    if (!new RegExp(`export\\s+(async\\s+)?function\\s+${name}\\b`).test(code)) {
-      problems.push(`Missing \`export function ${name}\`.`);
+  if (manifest.surface === "service") {
+    if (!SERVICE_ENTRY_POINTS.some(exported)) {
+      problems.push(
+        `A service app needs at least one of: ${SERVICE_ENTRY_POINTS.map((name) => `export function ${name}`).join(", ")}.`
+      );
+    }
+    for (const trigger of manifest.triggers ?? []) {
+      if (!exported("onTrigger")) {
+        problems.push(`Subscribes to "${trigger}" but exports no onTrigger.`);
+        break;
+      }
+    }
+  } else {
+    for (const name of REQUIRED_EXPORTS) {
+      if (!exported(name)) {
+        problems.push(`Missing \`export function ${name}\`.`);
+      }
     }
   }
 
   if (/\bfetch\s*\(/.test(code)) {
-    warnings.push("Calls fetch(). The sandbox has no network; this will fail at runtime.");
+    warnings.push(
+      "Calls fetch(). The sandbox has no network. To reach an approved host, return an http.fetch effect and read the answer in onFetch."
+    );
   }
   if (/\b(eval|new\s+Function)\s*\(/.test(code)) {
     warnings.push("Uses eval or new Function. Reviewers will almost certainly reject this.");

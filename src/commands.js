@@ -9,11 +9,14 @@ import * as store from "./credentials.js";
 
 const TEMPLATES = fileURLToPath(new URL("../templates/", import.meta.url));
 
-const TEMPLATE_NAMES = { counter: "counter.js", race: "race.js" };
-const TEMPLATE_PLACEMENT = { counter: "many", race: "single" };
+const TEMPLATE_NAMES = { counter: "counter.js", race: "race.js", bot: "bot.js" };
+const TEMPLATE_PLACEMENT = { counter: "many", race: "single", bot: "single" };
+const TEMPLATE_SURFACE = { counter: "blocks", race: "blocks", bot: "service" };
+const TEMPLATE_TRIGGERS = { counter: [], race: [], bot: ["topic_created"] };
 const TEMPLATE_SCOPES = {
   counter: ["kv"],
   race: ["kv", "kv.shared", "points", "realtime", "schedule"],
+  bot: ["kv", "post.read", "post.write"],
 };
 
 export async function init(args, io) {
@@ -27,7 +30,7 @@ export async function init(args, io) {
 
   const template = templateFrom(args);
   if (!TEMPLATE_NAMES[template]) {
-    throw new Error(`Unknown template "${template}". Available: counter, race.`);
+    throw new Error(`Unknown template "${template}". Available: ${Object.keys(TEMPLATE_NAMES).join(", ")}.`);
   }
 
   const dir = path.resolve(process.cwd(), slug);
@@ -39,11 +42,18 @@ export async function init(args, io) {
     entry: "src/main.js",
     scopes: TEMPLATE_SCOPES[template],
     // "blocks" draws through the site's components; "webview" ships your own
-    // HTML and needs an admin to grant it.
-    surface: "blocks",
+    // HTML and needs an admin to grant it; "service" has no interface at all
+    // and is woken by site events instead.
+    surface: TEMPLATE_SURFACE[template],
     // "single" means the app lives in one post; "many" lets anyone add it to
     // theirs. Apps with a shared leaderboard want "single".
     placement: TEMPLATE_PLACEMENT[template],
+    // Site events that wake onTrigger. Only meaningful for a service app.
+    triggers: TEMPLATE_TRIGGERS[template],
+    // Exact hostnames the app may reach, each approved by a reviewer one at a
+    // time. Needs the "http" scope, and requests are made by the site rather
+    // than from inside the sandbox.
+    domains: [],
   };
 
   await writeFile(
@@ -68,7 +78,7 @@ export async function init(args, io) {
 export async function dev(_args, io, cwd = process.cwd()) {
   const manifest = await readManifest(cwd);
   const code = await bundle(path.join(cwd, manifest.entry));
-  const { problems, warnings } = inspect(code);
+  const { problems, warnings } = inspect(code, manifest);
 
   for (const warning of warnings) {
     io.warn(`warning: ${warning}`);
@@ -92,6 +102,7 @@ export async function upload(args, io, cwd = process.cwd()) {
     version: {
       bundle: code,
       requested_scopes: manifest.scopes ?? [],
+      requested_domains: domainsFrom(manifest),
       change_note: note,
       manifest: declaredFrom(manifest),
     },
@@ -115,7 +126,7 @@ export async function playtest(_args, io, cwd = process.cwd(), { watchFn = watch
   // stopped reaching the site without saying so.
   const push = async () => {
     const code = await bundle(path.join(cwd, manifest.entry));
-    const { problems } = inspect(code);
+    const { problems } = inspect(code, manifest);
     if (problems.length) {
       io.warn(problems.join("\n"));
       return null;
@@ -125,6 +136,7 @@ export async function playtest(_args, io, cwd = process.cwd(), { watchFn = watch
       version: {
         bundle: code,
         requested_scopes: manifest.scopes ?? [],
+        requested_domains: domainsFrom(manifest),
         change_note: "playtest",
         manifest: declaredFrom(manifest),
       },
@@ -182,6 +194,14 @@ function declaredFrom(manifest) {
     placement: manifest.placement ?? "single",
     triggers: manifest.triggers ?? [],
   };
+}
+
+/**
+ * Hosts the app wants to reach. Written flat like `scopes`, but the nested form
+ * is accepted too, because that is the shape people arrive with from Devvit.
+ */
+function domainsFrom(manifest) {
+  return manifest.domains ?? manifest.permissions?.http?.domains ?? [];
 }
 
 function templateFrom(args) {

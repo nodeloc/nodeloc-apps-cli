@@ -36,7 +36,7 @@ export NODELOC_APPS_API_USERNAME=你的用户名
 ## 用法
 
 ```bash
-nodeloc-apps init my-game --template counter   # counter | race
+nodeloc-apps init my-game --template counter   # counter | race | bot
 cd my-game
 
 nodeloc-apps dev        # 打包 + 静态检查，不上传
@@ -50,13 +50,15 @@ nodeloc-apps logs --limit 50
 | `login --site <url>` | 通过浏览器登录 |
 | `whoami` | 当前身份 |
 | `logout` | 忘掉本机凭据 |
-| `init <slug> [--template counter\|race]` | 在 `./<slug>` 建项目 |
+| `init <slug> [--template counter\|race\|bot]` | 在 `./<slug>` 建项目 |
 | `dev` | 打包并检查，不上传 |
 | `playtest` | 推到私有安装，监听改动自动重推 |
 | `upload [--note "..."]` | 提交审核 |
 | `logs [--limit N]` | 看每次调用的 handler、结果、耗时、错误码 |
 
-`dev` 会把相对 import 内联成单个模块，并提前拦掉服务端一定会拒的写法：缺 `render` 导出、`eval`、`node:` 内建、浏览器全局、`fetch`（沙箱没有网络）。
+`dev` 会把相对 import 内联成单个模块，并提前拦掉服务端一定会拒的写法：缺 `render` 导出（service app 则要求至少有一个 `onTrigger`/`onSchedule`/`onFetch`）、`eval`、`node:` 内建、浏览器全局、`fetch`。
+
+沙箱没有网络，这一点不会变。要访问外部服务，handler 返回 `http.fetch` effect，由站点代为请求，结果之后作为一次单独的 `onFetch` 调用送回来——只允许 https，只允许审核批准过的精确主机名。
 
 ## 项目结构
 
@@ -72,11 +74,14 @@ my-game/
   "name": "My game",
   "entry": "src/main.js",
   "scopes": ["kv"],
-  "surface": "blocks",     // blocks | webview
+  "surface": "blocks",     // blocks | webview | service
   "placement": "single",   // single | many
-  "triggers": []
+  "triggers": [],          // 唤醒 onTrigger 的站点事件
+  "domains": []            // 允许访问的精确主机名，逐个送审
 }
 ```
+
+`surface: "service"` 是没有界面的 app——机器人。它不渲染，也没有可点的东西：由 `triggers` 里的站点事件唤醒，以自己的账号说话，并且由**管理员**把它装到全站或某个分类上，而不是由成员嵌进帖子里。这类 app 用 `--template bot` 起步。
 
 `placement` 值得想清楚：`single` 表示全站只应存在一处（有共享排行榜的都属于此类，因为每个安装的共享区是独立的，放两处等于把榜劈成两半）；`many` 适合投票、倒计时、骰子这类每处一份才合理的东西。
 

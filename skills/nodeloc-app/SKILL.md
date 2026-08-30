@@ -1,6 +1,6 @@
 ---
 name: nodeloc-app
-description: Build, test and publish a sandboxed app or mini-game for a NodeLoc/Discourse community with the nodeloc-apps CLI. Use whenever writing app handlers (render/onAction/onMessage), a blocks component tree, an app.json manifest, or working in a directory that contains app.json.
+description: Build, test and publish a sandboxed app, bot or mini-game for a NodeLoc/Discourse community with the nodeloc-apps CLI. Use whenever writing app handlers (render/onAction/onMessage/onTrigger/onSchedule/onFetch), a blocks component tree, an app.json manifest, or working in a directory that contains app.json.
 ---
 
 # Writing a community app
@@ -11,7 +11,7 @@ An app is a JS module exporting handlers. Handlers run **server-side in a sandbo
 
 ## Before writing code
 
-Read `app.json` if it exists. If starting fresh: `nodeloc-apps init <slug> --template counter` (or `--template race` for a shared-state example). Do not hand-roll the project layout.
+Read `app.json` if it exists. If starting fresh: `nodeloc-apps init <slug> --template counter` (`--template race` for a shared-state example, `--template bot` for an app with no interface). Do not hand-roll the project layout.
 
 ```jsonc
 {
@@ -19,17 +19,25 @@ Read `app.json` if it exists. If starting fresh: `nodeloc-apps init <slug> --tem
   "name": "My game",
   "entry": "src/main.js",
   "scopes": ["kv"],          // request the minimum; extra scopes slow review
-  "surface": "blocks",       // blocks | webview
+  "surface": "blocks",       // blocks | webview | service
   "placement": "single",     // single | many
-  "triggers": []             // post_created | topic_created | post_liked
+  "triggers": [],            // post_created | post_edited | topic_created
+                             // | post_liked | user_created
+  "domains": []              // exact hostnames, each approved one at a time
 }
 ```
+
+`surface: "service"` is an app with no interface — a bot. It never renders and
+nobody presses anything: it is woken by the events in `triggers`, acts under an
+account of its own, and an **admin** installs it against the site or one
+category rather than a member embedding it in a post. `placement` and the blocks
+section below do not apply to it.
 
 `placement` is a real decision, not boilerplate. **Each install has its own separate shared area.** An app with a site-wide leaderboard must be `single`, or the board splits in half the moment someone adds it to a second post. Use `many` only when one copy per post is the point (polls, countdowns, dice, converters).
 
 ## Handlers
 
-All handlers are `(ctx, api)` and may be async. `render` is **required** — the bundler rejects a module without it.
+All handlers are `(ctx, api)` and may be async. `render` is **required for an app with an interface** — the bundler rejects such a module without it.
 
 | Handler | Fires when |
 |---|---|
@@ -39,8 +47,24 @@ All handlers are `(ctx, api)` and may be async. `render` is **required** — the
 | `webview` | Building the page (webview surface only) |
 | `onTrigger` | A site event declared in `triggers` |
 | `onSchedule` | A task registered with `schedule.add` |
+| `onFetch` | An `http.fetch` the app declared has come back |
 
-`onTrigger` and `onSchedule` run as the app's own bot account and **cannot read any member's private data**.
+`onTrigger`, `onSchedule` and `onFetch` run as the app's own bot account and **cannot read any member's private data**. Their reads and writes address the app's shared area, so `api.kv.get` in a background run reads back what a background run stored.
+
+A service app must export at least one of `onTrigger` / `onSchedule` / `onFetch`; `render` is not required and is never called.
+
+### Background ctx
+
+```jsonc
+{
+  "background": true, "install_id": 12, "config": {},
+  "event": "post_created",                          // onTrigger
+  "data": { "topic_id": 481, "post_id": 1902, "user_id": 7 },
+  "job_key": "daily", "payload": {},                // onSchedule
+  "request_id": "weather", "ok": true,              // onFetch
+  "status": 200, "headers": {}, "body": "..."
+}
+```
 
 ### ctx
 
@@ -106,6 +130,9 @@ Reads — always `await`; the data was prefetched before the sandbox started, so
 | `api.kv.get(key)` / `api.kv.list()` | `kv` — this member's data in this install |
 | `api.kv.listPublic()` | `kv.shared` — the shared area |
 | `api.points.balance()` | `points` |
+| `api.post.get(id)` / `api.topic.get(id)` | `post.read` — the post and topic this run is about |
+
+`api.post.get` answers for the post the invocation concerns and **null for any other id**. That is not a bug to work around: prefetching is what stops an app installed in one place reading across the site.
 
 Writes — returned as effects, validated one by one, committed in a single transaction:
 
@@ -117,13 +144,38 @@ Writes — returned as effects, validated one by one, committed in a single tran
 | `points.award` | `points` |
 | `rt.publish` | `realtime` |
 | `schedule.add` / `schedule.cancel` | `schedule` |
+| `post.create` / `post.reply` | `post.write` |
+| `notify.user` | `notify` |
+| `http.fetch` | `http` |
+
+```js
+{ type: "post.reply", topic_id: 481, raw: "..." }
+{ type: "post.create", category_id: 5, title: "...", raw: "..." }
+{ type: "notify.user", user_id: 7, message: "...", path: "/t/481" }
+{ type: "http.fetch", request_id: "weather", url: "https://api.example.com/now",
+  method: "GET", headers: {}, body: "" }
+```
+
+Three things bound what a bot can say. **Where**: an app installed against a
+category may only post in it and its subcategories; against the site, anywhere
+its own account may post. **How often**: a daily ceiling per app, and a second
+one per topic counted across every app, so two bots cannot fill a thread between
+them. **Who**: `notify.user` reaches only the member whose action woke this run —
+anyone else is `E_NOTIFY_DENIED`.
+
+`http.fetch` is not a fetch. The sandbox has no network and does not get one: the
+effect asks the **site** to make the request, and the answer arrives later as a
+separate `onFetch` invocation carrying the same `request_id`. Only https, only
+hostnames a reviewer approved for this app, and the response body is capped.
+Credentials belong in the install's `config` (an admin sets it), never in the
+bundle a reviewer reads.
 
 Two rules that decide whether a leaderboard is worth anything:
 
 - **Only a handler can write the shared area.** A member's `kv.set` always lands in their own namespace. This is why `kv.shared` can be trusted.
 - **A broadcast is a signal, never state.** Clients receiving `rt.publish` re-render through the permission-checked path; the broadcast payload is never used as data.
 
-`context` is implicit. `post.read` / `post.write` / `notify` are registered but **not wired up** — do not request them.
+`context` is implicit. `post.write` and `webview` are **privileged**: only an admin grants them, and each has a site setting that has to be on as well. In a playtest, `post.write` effects are checked in full and then thrown away — a playtest can say what it would post, but never posts.
 
 ## Webview
 
@@ -158,14 +210,22 @@ Run `dev` after every change — it catches what the server would reject anyway 
 | `E_INVALID_BLOCKS` | Unknown type/attribute, or over the node/depth/size limits |
 | `E_APP_TIMEOUT` / `E_APP_OUT_OF_MEMORY` | The sandbox killed the call |
 | `E_APP_FAILED` | The handler threw |
+| `E_SCOPE_UNAVAILABLE` | The site has that capability switched off entirely |
+| `E_POST_OUT_OF_SCOPE` | Posting somewhere the app was not installed |
+| `E_POST_DENIED` | The app's own account may not post there |
+| `E_POST_QUOTA` / `E_POST_TOPIC_QUOTA` | The day's posts are spent |
+| `E_NOTIFY_DENIED` | Notifying somebody this run is not acting for |
+| `E_HTTP_DOMAIN_DENIED` | That host is not on the app's approved list |
 
 ## Checklist before upload
 
-- [ ] `render` exported; every handler returns `{ blocks, state, effects }`
+- [ ] `render` exported (or, for a service app, `onTrigger`/`onSchedule`/`onFetch`); every handler returns `{ blocks, state, effects }`
 - [ ] `ctx.user === null` handled
 - [ ] No `fetch`, no `node:` imports, no `window`/`document`/`localStorage`
 - [ ] Every attribute value is inside the allowed enumeration
 - [ ] `scopes` lists exactly what the effects need — nothing more
 - [ ] Anything competitive is decided by the handler, never sent by the client
 - [ ] `placement` matches whether the app has shared state
+- [ ] `domains` lists exact hostnames only — no wildcards, no scheme, no path
+- [ ] Nothing a bot posts is written in a loop it could feed itself
 - [ ] `nodeloc-apps dev` is clean

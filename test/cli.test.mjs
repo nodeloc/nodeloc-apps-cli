@@ -63,18 +63,39 @@ describe("inspect", () => {
     assert.equal(warnings.length, 2, "network and eval are both flagged");
   });
 
-  for (const template of ["counter.js", "race.js"]) {
+  for (const [template, manifest] of [
+    ["counter.js", {}],
+    ["race.js", {}],
+    ["bot.js", { surface: "service", triggers: ["topic_created"] }],
+  ]) {
     test(`accepts the shipped ${template} template`, async () => {
       const code = await readFile(
         new URL(`../templates/${template}`, import.meta.url),
         "utf8"
       );
-      const { problems, warnings } = inspect(code);
+      const { problems, warnings } = inspect(code, manifest);
 
       assert.deepEqual(problems, [], "the template we hand people must pass");
       assert.deepEqual(warnings, [], "and must not warn");
     });
   }
+
+  test("a service app needs a way in, and render is not it", () => {
+    const { problems } = inspect("export function render() {}", { surface: "service" });
+
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /onTrigger/);
+  });
+
+  test("a service app that subscribes to an event must handle it", () => {
+    const { problems } = inspect("export function onSchedule() {}", {
+      surface: "service",
+      triggers: ["post_created"],
+    });
+
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /onTrigger/);
+  });
 });
 
 describe("config", () => {
