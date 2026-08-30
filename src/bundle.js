@@ -12,7 +12,7 @@ import path from "node:path";
 // interface, so requiring `render` of one would mean shipping a function that
 // is never called; what it must have instead is at least one way in.
 const REQUIRED_EXPORTS = ["render"];
-const SERVICE_ENTRY_POINTS = ["onTrigger", "onSchedule", "onFetch"];
+const SERVICE_ENTRY_POINTS = ["onTrigger", "onSchedule", "onFetch", "onInstall"];
 
 // Both forms have to be caught: `import x from "./y.js"` and the side-effect
 // `import "./y.js"`. Missing the second would ship an import statement the

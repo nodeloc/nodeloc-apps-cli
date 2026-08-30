@@ -27,6 +27,8 @@ Read `app.json` if it exists. If starting fresh: `nodeloc-apps init <slug> --tem
 }
 ```
 
+**A topic's first post arrives as `topic_created`, never as `post_created`.** The two do not both fire for it, so an app that wants opening posts *and* replies has to subscribe to both. Subscribing to `post_created` alone silently misses every opening post on the forum, with nothing in the logs to say so.
+
 `surface: "service"` is an app with no interface — a bot. It never renders and
 nobody presses anything: it is woken by the events in `triggers`, acts under an
 account of its own, and an **admin** installs it against the site or one
@@ -48,10 +50,13 @@ All handlers are `(ctx, api)` and may be async. `render` is **required for an ap
 | `onTrigger` | A site event declared in `triggers` |
 | `onSchedule` | A task registered with `schedule.add` |
 | `onFetch` | An `http.fetch` the app declared has come back |
+| `onInstall` | The app is put to work, once per install |
 
-`onTrigger`, `onSchedule` and `onFetch` run as the app's own bot account and **cannot read any member's private data**. Their reads and writes address the app's shared area, so `api.kv.get` in a background run reads back what a background run stored.
+`onTrigger`, `onSchedule`, `onFetch` and `onInstall` run as the app's own bot account and **cannot read any member's private data**. Their reads and writes address the app's shared area, so `api.kv.get` in a background run reads back what a background run stored.
 
-A service app must export at least one of `onTrigger` / `onSchedule` / `onFetch`; `render` is not required and is never called.
+A service app must export at least one of `onTrigger` / `onSchedule` / `onFetch` / `onInstall`; `render` is not required and is never called.
+
+**An app that only works on a schedule must have `onInstall`.** `onSchedule` fires for a job that already exists, and a job only exists because an effect asked for one — so the first `schedule.add` has nowhere else to come from. `onInstall` runs again on every re-install and every playtest push, so what it does must be idempotent (`schedule.add` is: it is keyed by `job_key` and rewritten in place).
 
 ### Background ctx
 
