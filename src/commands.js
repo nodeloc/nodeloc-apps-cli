@@ -195,6 +195,10 @@ function declaredFrom(manifest) {
     surface: manifest.surface ?? "blocks",
     placement: manifest.placement ?? "single",
     triggers: manifest.triggers ?? [],
+    // What the install form will ask for. Without this the only honest thing
+    // the platform can offer somebody installing your app is a box to type
+    // JSON into, which asks them to already know what it wants.
+    settings: manifest.settings ?? [],
   };
 }
 

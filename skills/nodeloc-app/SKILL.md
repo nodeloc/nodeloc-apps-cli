@@ -23,7 +23,8 @@ Read `app.json` if it exists. If starting fresh: `nodeloc-apps init <slug> --tem
   "placement": "single",     // single | many
   "triggers": [],            // post_created | post_edited | topic_created
                              // | post_liked | user_created | post_flagged
-  "domains": []              // exact hostnames, each approved one at a time
+  "domains": [],             // exact hostnames, each approved one at a time
+  "settings": []             // what the install form asks for; see below
 }
 ```
 
@@ -36,6 +37,30 @@ category rather than a member embedding it in a post. `placement` and the blocks
 section below do not apply to it.
 
 `placement` is a real decision, not boilerplate. **Each install has its own separate shared area.** An app with a site-wide leaderboard must be `single`, or the board splits in half the moment someone adds it to a second post. Use `many` only when one copy per post is the point (polls, countdowns, dice, converters).
+
+### Asking for what you need
+
+An app that needs to be told something — an endpoint, a key, a category —
+declares the fields, and the page that installs it renders the form:
+
+```jsonc
+"settings": [
+  { "key": "endpoint", "label": "API endpoint", "type": "url", "required": true,
+    "description": "Shown under the field." },
+  { "key": "api_key", "label": "API key", "type": "secret", "required": true },
+  { "key": "action", "type": "enum", "options": ["flag", "off"], "default": "flag" },
+  { "key": "watch", "type": "boolean", "default": false }
+]
+```
+
+Types: `string` `text` `secret` `url` `integer` `boolean` `enum`. At most 20
+fields. `url` accepts https only; `enum` needs `options`.
+
+A `secret` is never sent back to a browser — not even the browser of the person
+who typed it. The form shows it as already set, and leaving it alone keeps it.
+
+Whatever is filled in arrives as `ctx.config`. Declare nothing and `ctx.config`
+is whatever an admin put there by hand, which is the old behaviour.
 
 ## Handlers
 
