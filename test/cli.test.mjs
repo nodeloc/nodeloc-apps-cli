@@ -30,6 +30,36 @@ describe("bundle", () => {
     assert.doesNotMatch(code, /from '\.\/helper/, "the import statement is gone");
   });
 
+  test("keeps a renamed import working after the module is inlined", async () => {
+    const dir = await scratch();
+    await writeFile(path.join(dir, "helper.js"), "export function read() { return 'ok'; }\n");
+    await writeFile(
+      path.join(dir, "main.js"),
+      "import { read as check } from './helper.js';\nexport function render() { return check(); }\n"
+    );
+
+    const code = await bundle(path.join(dir, "main.js"));
+
+    // The bug this covers: inlining threw the import statement away and the
+    // renaming with it, leaving a bundle that passed every check here and then
+    // failed at runtime with "check is not defined".
+    const module = await import(
+      `data:text/javascript;base64,${Buffer.from(code, "utf8").toString("base64")}`
+    );
+    assert.equal(module.render(), "ok");
+  });
+
+  test("refuses a default import rather than inlining it into nothing", async () => {
+    const dir = await scratch();
+    await writeFile(path.join(dir, "helper.js"), "export default function () { return 1; }\n");
+    await writeFile(
+      path.join(dir, "main.js"),
+      "import helper from './helper.js';\nexport function render() { return helper(); }\n"
+    );
+
+    await assert.rejects(() => bundle(path.join(dir, "main.js")), /cannot be inlined/);
+  });
+
   test("refuses a circular import instead of hanging", async () => {
     const dir = await scratch();
     await writeFile(path.join(dir, "a.js"), "import './b.js';\nexport function render() {}\n");

@@ -17,7 +17,32 @@ const SERVICE_ENTRY_POINTS = ["onTrigger", "onSchedule", "onFetch", "onInstall"]
 // Both forms have to be caught: `import x from "./y.js"` and the side-effect
 // `import "./y.js"`. Missing the second would ship an import statement the
 // sandbox cannot resolve, since nothing outside the bundle exists there.
-const IMPORT_PATTERN = /^\s*import\s+(?:[^;'"]*?\sfrom\s+)?["'](\.[^"']+)["'];?/gm;
+//
+// The binding clause is captured too, because inlining a module throws its
+// import statement away and takes any renaming in it along: `import { read as
+// check }` left `check` undefined in a bundle that passed every check here and
+// then failed at runtime, which is the worst way for this to go wrong.
+const IMPORT_PATTERN =
+  /^\s*import\s+(?:([^;'"]*?)\s+from\s+)?["'](\.[^"']+)["'];?/gm;
+
+/** `{ read as check, other }` -> the aliases that have to survive inlining. */
+function aliasesIn(clause) {
+  const braces = /\{([^}]*)\}/.exec(clause ?? "");
+  if (!braces) {
+    return [];
+  }
+
+  return braces[1]
+    .split(",")
+    .map((part) => /^\s*([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)\s*$/.exec(part))
+    .filter(Boolean)
+    .map(([, original, alias]) => `const ${alias} = ${original};`);
+}
+
+/** A default import has no name to bind to once the module is inlined. */
+function defaultImportIn(clause) {
+  return /^\s*[A-Za-z_$][\w$]*\s*(,|$)/.test(clause ?? "") ? clause.trim().split(/[\s,]/)[0] : null;
+}
 
 export class BundleError extends Error {}
 
@@ -46,12 +71,24 @@ export async function bundle(entryPath, { maxBytes = 512 * 1024, seen = new Set(
   let lastIndex = 0;
 
   for (const match of source.matchAll(IMPORT_PATTERN)) {
-    const target = path.resolve(dir, match[1]);
+    const [statement, clause, specifier] = match;
+    const target = path.resolve(dir, specifier);
     const withExtension = target.endsWith(".js") ? target : `${target}.js`;
+
+    const defaultImport = defaultImportIn(clause);
+    if (defaultImport) {
+      throw new BundleError(
+        `\`import ${defaultImport} from "${specifier}"\` cannot be inlined. ` +
+          "Export and import it by name instead."
+      );
+    }
 
     parts.push(source.slice(lastIndex, match.index));
     parts.push(await bundle(withExtension, { maxBytes, seen }));
-    lastIndex = match.index + match[0].length;
+    // Re-bound after the module it came from, so the alias exists by the time
+    // anything uses it.
+    parts.push(aliasesIn(clause).join("\n"));
+    lastIndex = match.index + statement.length;
   }
 
   parts.push(source.slice(lastIndex));
