@@ -6,7 +6,7 @@ import path from "node:path";
 import { bundle, inspect, BundleError } from "../src/bundle.js";
 import { createClient, ApiError } from "../src/api.js";
 import { readManifest, readCredentials, ConfigError } from "../src/config.js";
-import { init, dev, playtest } from "../src/commands.js";
+import { init, dev, playtest, upload } from "../src/commands.js";
 import { createServer } from "node:http";
 
 const silentIo = { log() {}, warn() {} };
@@ -233,6 +233,52 @@ describe("commands", () => {
         !seen.some((url) => url.endsWith("/versions.json")),
         "nothing is submitted for review"
       );
+    } finally {
+      server.close();
+      process.chdir(cwd);
+      delete process.env.NODELOC_APPS_SITE;
+      delete process.env.NODELOC_APPS_API_KEY;
+      delete process.env.NODELOC_APPS_API_USERNAME;
+    }
+  });
+
+  test("upload sends readme.md and the hosts the app asked for", async () => {
+    const dir = await scratch();
+    const cwd = process.cwd();
+    process.chdir(dir);
+
+    let submitted = null;
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        res.setHeader("content-type", "application/json");
+        if (req.url === "/apps/authoring.json") {
+          res.end(JSON.stringify([{ id: 7, slug: "dice-roller" }]));
+        } else {
+          submitted = JSON.parse(body).version;
+          res.end(JSON.stringify({ version: { id: 9, version_number: 1 } }));
+        }
+      });
+    });
+
+    try {
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      process.env.NODELOC_APPS_SITE = `http://127.0.0.1:${server.address().port}`;
+      process.env.NODELOC_APPS_API_KEY = "k";
+      process.env.NODELOC_APPS_API_USERNAME = "u";
+
+      await init(["dice-roller"], silentIo);
+      const project = path.join(dir, "dice-roller");
+      await writeFile(path.join(project, "readme.md"), "# Dice roller\n");
+      const manifest = JSON.parse(await readFile(path.join(project, "app.json"), "utf8"));
+      manifest.domains = ["api.example.com"];
+      await writeFile(path.join(project, "app.json"), JSON.stringify(manifest));
+
+      await upload([], silentIo, project);
+
+      assert.equal(submitted.readme, "# Dice roller\n", "the readme travels with the version");
+      assert.deepEqual(submitted.requested_domains, ["api.example.com"]);
     } finally {
       server.close();
       process.chdir(cwd);

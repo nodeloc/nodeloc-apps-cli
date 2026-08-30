@@ -101,6 +101,7 @@ export async function upload(args, io, cwd = process.cwd()) {
   const version = await client.submitVersion(app.id, {
     version: {
       bundle: code,
+      readme: await readmeFrom(cwd),
       requested_scopes: manifest.scopes ?? [],
       requested_domains: domainsFrom(manifest),
       change_note: note,
@@ -135,6 +136,7 @@ export async function playtest(_args, io, cwd = process.cwd(), { watchFn = watch
     const pushed = await client.pushPlaytest(app.id, {
       version: {
         bundle: code,
+        readme: await readmeFrom(cwd),
         requested_scopes: manifest.scopes ?? [],
         requested_domains: domainsFrom(manifest),
         change_note: "playtest",
@@ -194,6 +196,20 @@ function declaredFrom(manifest) {
     placement: manifest.placement ?? "single",
     triggers: manifest.triggers ?? [],
   };
+}
+
+/**
+ * The introduction shown on the app's own page, and the one thing a reviewer
+ * reads that is not code. Optional: an app without one simply has no such
+ * section. It travels with the version rather than the app, so what was
+ * approved and what is displayed cannot drift apart.
+ */
+async function readmeFrom(cwd) {
+  try {
+    return await readFile(path.join(cwd, "readme.md"), "utf8");
+  } catch {
+    return "";
+  }
 }
 
 /**
