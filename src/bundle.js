@@ -139,6 +139,14 @@ export function inspect(code, manifest = {}) {
       "Calls fetch(). The sandbox has no network. To reach an approved host, return an http.fetch effect and read the answer in onFetch."
     );
   }
+  // A shop without a delivery handler takes the money and grants nothing until
+  // the app happens to reconcile — a bug an author only meets after a real
+  // member has paid, which is the most expensive possible place to find it.
+  if (/["']points\.spend["']/.test(code) && !exported("onSpend")) {
+    warnings.push(
+      "Declares points.spend but exports no onSpend. A member's payment lands there; without it, deliver by reconciling api.points.spends() on render."
+    );
+  }
   if (/\b(eval|new\s+Function)\s*\(/.test(code)) {
     warnings.push("Uses eval or new Function. Reviewers will almost certainly reject this.");
   }

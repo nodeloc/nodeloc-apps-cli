@@ -104,6 +104,7 @@ All handlers are `(ctx, api)` and may be async. `render` is **required for an ap
 | `onTrigger` | A site event declared in `triggers` |
 | `onSchedule` | A task registered with `schedule.add` |
 | `onFetch` | An `http.fetch` the app declared has come back |
+| `onSpend` | A member confirmed a `points.spend` payment (`ctx.spend`) |
 | `onInstall` | The app is put to work, once per install |
 
 `onTrigger`, `onSchedule`, `onFetch` and `onInstall` run as the app's own bot account and **cannot read any member's private data**. Their reads and writes address the app's shared area, so `api.kv.get` in a background run reads back what a background run stored.
@@ -189,6 +190,7 @@ Reads — always `await`; the data was prefetched before the sandbox started, so
 | `api.kv.get(key)` / `api.kv.list()` | `kv` — this member's data in this install |
 | `api.kv.listPublic()` | `kv.shared` — the shared area |
 | `api.points.balance()` | `points` |
+| `api.points.spends()` | `points.spend` — this member's purchases here, last 10 |
 | `api.post.get(id)` / `api.topic.get(id)` | `post.read` — the post and topic this run is about |
 
 `api.post.get` answers for the post the invocation concerns and **null for any other id**. That is not a bug to work around: prefetching is what stops an app installed in one place reading across the site.
@@ -201,6 +203,7 @@ Writes — returned as effects, validated one by one, committed in a single tran
 | `kv.shared.set` / `kv.shared.delete` | `kv.shared` |
 | `ui.toast` / `ui.navigate` | `ui` |
 | `points.award` | `points` |
+| `points.spend` | `points.spend` (privileged) |
 | `rt.publish` | `realtime` |
 | `schedule.add` / `schedule.cancel` | `schedule` |
 | `post.create` / `post.reply` | `post.write` |
@@ -229,12 +232,40 @@ hostnames a reviewer approved for this app, and the response body is capped.
 Credentials belong in the install's `config` (an admin sets it), never in the
 bundle a reviewer reads.
 
+## Points: awards and sales
+
+`points.award` is a transfer, not a mint: the points come out of the balance of
+**whoever installed the app** and go to the member. A batch the installer cannot
+cover is refused whole (`E_POINTS_FUNDS`); a site with no points system refuses
+the same way (`E_POINTS_UNAVAILABLE`). Only an install an admin marked
+platform-funded mints outright. Per-award, per-app-daily and per-member-daily
+ceilings apply either way.
+
+Selling goes the other way. `points.spend` (privileged) charges nobody — it asks:
+
+```js
+{ type: "points.spend", request_id: "skin-gold", amount: 30, label: "Golden skin" }
+```
+
+The **site** — never your UI — opens a confirmation naming the amount, the label
+and who gets paid. Only the member pressing Pay there moves any points; then
+your `onSpend(ctx, api)` runs with `ctx.spend = { request_id, amount, status:
+"paid" }`, and that is where you deliver (a `kv.set`, say). Declining, or five
+minutes of silence, means nothing happened. You cannot draw or click that
+dialog; one ask per invocation, a new ask replaces an unanswered one, and
+per-purchase and per-member-daily spending caps apply.
+
+A crashed `onSpend` does not undo the payment. Reconcile with
+`api.points.spends()` and deliver anything paid but never granted — and key
+delivery on `request_id` so a retry cannot deliver twice. A webview page hears
+the outcome through `community.onSpend = fn`.
+
 Two rules that decide whether a leaderboard is worth anything:
 
 - **Only a handler can write the shared area.** A member's `kv.set` always lands in their own namespace. This is why `kv.shared` can be trusted.
 - **A broadcast is a signal, never state.** Clients receiving `rt.publish` re-render through the permission-checked path; the broadcast payload is never used as data.
 
-`context` is implicit. `post.write` and `webview` are **privileged**: only an admin grants them, and each has a site setting that has to be on as well. In a playtest, `post.write` effects are checked in full and then thrown away — a playtest can say what it would post, but never posts.
+`context` is implicit. `post.write`, `webview` and `points.spend` are **privileged**: only an admin grants them, and `post.write` and `webview` each have a site setting that has to be on as well. In a playtest, `post.write` and `points.spend` effects are checked in full and then thrown away — a playtest can say what it would post or charge, but never does either.
 
 ## Helping to moderate
 

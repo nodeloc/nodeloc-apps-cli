@@ -93,6 +93,15 @@ describe("inspect", () => {
     assert.equal(warnings.length, 2, "network and eval are both flagged");
   });
 
+  test("warns when a shop has nowhere for the payment to land", () => {
+    const asks =
+      "export function render() { return { effects: [{ type: 'points.spend' }] } }";
+    assert.match(inspect(asks).warnings[0], /onSpend/);
+
+    const delivers = `${asks}\nexport function onSpend() {}`;
+    assert.equal(inspect(delivers).warnings.length, 0);
+  });
+
   for (const [template, manifest] of [
     ["counter.js", {}],
     ["race.js", {}],
