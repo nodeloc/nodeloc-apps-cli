@@ -25,7 +25,9 @@ const io = {
 
 const [command, ...args] = process.argv.slice(2);
 
-if (!command || command === "--help" || command === "-h") {
+// `upload --help` must not upload.
+const askingForHelp = ["--help", "-h"].some((flag) => flag === command || args.includes(flag));
+if (!command || askingForHelp) {
   io.log(USAGE);
   process.exit(command ? 0 : 1);
 }
