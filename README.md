@@ -75,6 +75,7 @@ my-game/
   "entry": "src/main.js",
   "scopes": ["kv"],
   "surface": "blocks",     // blocks | webview | service
+  "kind": "applet",        // game | applet | bot：目录和侧栏把它放在哪一栏
   "placement": "single",   // single | many
   "triggers": [],          // 唤醒 onTrigger 的站点事件
   "domains": []            // 允许访问的精确主机名，逐个送审
@@ -82,6 +83,8 @@ my-game/
 ```
 
 `surface: "service"` 是没有界面的 app——机器人。它不渲染，也没有可点的东西：由 `triggers` 里的站点事件唤醒，以自己的账号说话，并且由**管理员**把它装到全站或某个分类上，而不是由成员嵌进帖子里。这类 app 用 `--template bot` 起步。
+
+`kind` 决定 app 在目录和侧栏里的归类：`game` 是打开就玩的游戏，`applet` 是嵌在帖子或节点里的小工具，`bot` 是没有界面的机器人。不写的话，service 记为 bot，其余记为 applet；提交后作者也可以在"你的应用"里改。
 
 `placement` 值得想清楚：`single` 表示全站只应存在一处（有共享排行榜的都属于此类，因为每个安装的共享区是独立的，放两处等于把榜劈成两半）；`many` 适合投票、倒计时、骰子这类每处一份才合理的东西。
 

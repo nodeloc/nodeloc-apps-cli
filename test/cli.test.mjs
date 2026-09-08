@@ -102,10 +102,23 @@ describe("inspect", () => {
     assert.equal(inspect(delivers).warnings.length, 0);
   });
 
+  test("a kind the directory does not have is refused before upload", () => {
+    assert.match(inspect("export function render() {}", { kind: "toaster" }).problems[0], /kind/);
+    assert.equal(inspect("export function render() {}", { kind: "game" }).problems.length, 0);
+  });
+
+  test("a service app calling itself a game is told it will be filed as a bot", () => {
+    const { warnings } = inspect("export function onTrigger() {}", {
+      surface: "service",
+      kind: "game",
+    });
+    assert.match(warnings[0], /bot/);
+  });
+
   for (const [template, manifest] of [
-    ["counter.js", {}],
-    ["race.js", {}],
-    ["bot.js", { surface: "service", triggers: ["topic_created"] }],
+    ["counter.js", { kind: "applet" }],
+    ["race.js", { kind: "game" }],
+    ["bot.js", { surface: "service", kind: "bot", triggers: ["topic_created"] }],
   ]) {
     test(`accepts the shipped ${template} template`, async () => {
       const code = await readFile(

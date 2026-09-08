@@ -12,6 +12,9 @@ const TEMPLATES = fileURLToPath(new URL("../templates/", import.meta.url));
 const TEMPLATE_NAMES = { counter: "counter.js", race: "race.js", bot: "bot.js" };
 const TEMPLATE_PLACEMENT = { counter: "many", race: "single", bot: "single" };
 const TEMPLATE_SURFACE = { counter: "blocks", race: "blocks", bot: "service" };
+// What the directory files the app under: a game is played, an applet is a
+// small program in a post or node, a bot works in the background.
+const TEMPLATE_KIND = { counter: "applet", race: "game", bot: "bot" };
 const TEMPLATE_TRIGGERS = { counter: [], race: [], bot: ["topic_created"] };
 const TEMPLATE_SCOPES = {
   counter: ["kv"],
@@ -45,6 +48,10 @@ export async function init(args, io) {
     // HTML and needs an admin to grant it; "service" has no interface at all
     // and is woken by site events instead.
     surface: TEMPLATE_SURFACE[template],
+    // "game" | "applet" | "bot": which shelf of the directory and sidebar the
+    // app sits on. A service is always a bot; anything else is an applet
+    // unless you say game.
+    kind: TEMPLATE_KIND[template],
     // "single" means the app lives in one post; "many" lets anyone add it to
     // theirs. Apps with a shared leaderboard want "single".
     placement: TEMPLATE_PLACEMENT[template],
@@ -193,6 +200,9 @@ function noteFrom(args) {
 function declaredFrom(manifest) {
   return {
     surface: manifest.surface ?? "blocks",
+    // Left out when the manifest says nothing, so the platform's own default
+    // (bot for a service, applet otherwise) applies rather than ours.
+    ...(manifest.kind ? { kind: manifest.kind } : {}),
     placement: manifest.placement ?? "single",
     triggers: manifest.triggers ?? [],
     // What the install form will ask for. Without this the only honest thing

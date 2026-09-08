@@ -108,9 +108,18 @@ export async function bundle(entryPath, { maxBytes = 512 * 1024, seen = new Set(
  * Checks the things the server would reject anyway, but here, before an author
  * spends a review cycle finding out.
  */
+const KINDS = ["game", "applet", "bot"];
+
 export function inspect(code, manifest = {}) {
   const problems = [];
   const warnings = [];
+
+  if (manifest.kind !== undefined && !KINDS.includes(manifest.kind)) {
+    problems.push(`"kind" must be one of ${KINDS.join(", ")}, not "${manifest.kind}".`);
+  }
+  if (manifest.surface === "service" && manifest.kind && manifest.kind !== "bot") {
+    warnings.push(`A service app is a bot; the platform will file it as one regardless of kind "${manifest.kind}".`);
+  }
   const exported = (name) =>
     new RegExp(`export\\s+(async\\s+)?function\\s+${name}\\b`).test(code);
 
