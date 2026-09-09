@@ -280,13 +280,21 @@ only an admin installs anything against the whole site.
 | `flag.create` | `flag.create` | Raises a flag. A person settles it. |
 | `post.delete` / `post.recover` | `moderate.post` | Privileged |
 | `topic.close` / `topic.tag` | `moderate.topic` | Privileged |
+| `user.mute` / `user.ban` | `moderate.user` | Privileged; 1, 3, 7 or 28 days, this node only |
+| `user.unmute` / `user.unban` | `moderate.user` | Privileged; only what this app applied |
 
 ```js
 { type: "flag.create", post_id: 1902, reason: "..." }
 { type: "post.delete", post_id: 1902 }
 { type: "topic.close", topic_id: 481, reason: "..." }
 { type: "topic.tag", topic_id: 481, tags: ["resolved"] }
+{ type: "user.mute", user_id: 4021, days: 7, reason: "..." }
+{ type: "user.unmute", user_id: 4021 }
 ```
+
+A restriction from an app always expires — there is no permanent option, so a
+bug heals itself. Staff, the node's owner and its moderators (a group the app's
+own account is in) can never be held back.
 
 **Flag first.** `flag.create` costs an ordinary scope because it ends with a
 person deciding; deleting costs a privileged one because it ends with somebody's
